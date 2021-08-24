@@ -1,7 +1,5 @@
 /** @odoo-module **/
 
-import BusService from 'bus.BusService';
-
 import { MessagingMenuContainer } from '@mail/components/messaging_menu_container/messaging_menu_container';
 import {
     addMessagingToEnv,
@@ -28,6 +26,12 @@ import Widget from 'web.Widget';
 import { createWebClient, getActionManagerServerData } from "@web/../tests/webclient/helpers";
 
 import LegacyRegistry from "web.Registry";
+import { makeFakeBusService } from '@bus/../tests/test_utils';
+import { makeLegacyBusService } from '@bus/js/services/bus_service';
+import { makeLegacyNotificationService } from "@web/legacy/utils";
+import { makeTestEnv } from '@web/../tests/helpers/mock_env';
+import { registry } from '@web/core/registry';
+import { websocketService } from "@bus/js/services/websocket_service";
 
 const {
     addMockEnvironment,
@@ -542,6 +546,7 @@ function getCreateThreadViewComponent({ afterEvent, components, env, widget }) {
  * @param {integer} [param0.res_id] makes only sense when `param0.hasView` is set:
  *   the res_id to use in createView.
  * @param {Object} [param0.services]
+ * @param {Object} [param0.legacyServices]
  * @param {Object} [param0.session]
  * @param {Object} [param0.View] makes only sense when `param0.hasView` is set:
  *   the View class to use in createView.
@@ -614,6 +619,7 @@ async function start(param0 = {}) {
         destroy: destroyCallbacks,
         return: returnCallbacks,
     } = callbacks;
+
     const { debug = false } = param0;
     initCallbacks.forEach(callback => callback(param0));
     const testSetupDoneDeferred = makeDeferred();
@@ -626,21 +632,13 @@ async function start(param0 = {}) {
         env.session
     );
     env.isDebug = env.isDebug || (() => true);
+    env.services = env.services || {};
     env = addMessagingToEnv(env);
     if (hasTimeControl) {
         env = addTimeControlToEnv(env);
     }
 
-    const services = Object.assign({}, {
-        bus_service: BusService.extend({
-            _beep() {}, // Do nothing
-            _poll() {}, // Do nothing
-            _registerWindowUnload() {}, // Do nothing
-            isOdooFocused() {
-                return true;
-            },
-            updateOption() {},
-        }),
+    const legacyServices = Object.assign({}, {
         chat_window: ChatWindowService.extend({
             _getParentNode() {
                 return document.querySelector(debug ? 'body' : '#qunit-fixture');
@@ -688,14 +686,36 @@ async function start(param0 = {}) {
                 _super();
             },
         }),
+    }, param0.legacyServices);
+
+    const services = Object.assign({}, {
+        bus_service: makeFakeBusService({
+            _beep() {},
+            _registerWindowUnload() {},
+            send() {},
+            isOdooFocused: () => true,
+        }),
+        websocketService: websocketService,
+        legacy_notification_service: makeLegacyNotificationService(env),
+        legacy_bus_service: makeLegacyBusService(env),
     }, param0.services);
+
+    for (const [serviceName, service] of Object.entries(services)) {
+        registry.category('services').add(serviceName, service);
+    }
+
+    if (!hasWebClient) {
+        // if we're not using createWebClient then, create a new test env
+        // in order for the new services to be added to the legacy env.
+        await makeTestEnv();
+    }
 
     const kwargs = Object.assign({}, param0, {
         archs: Object.assign({}, {
             'mail.message,false,search': '<search/>'
         }, param0.archs),
         debug: param0.debug || false,
-        services: Object.assign({}, services, param0.services),
+        services: Object.assign({}, legacyServices, param0.legacyServices),
     }, { env });
     let widget;
     let mockServer; // only in basic mode
@@ -748,9 +768,7 @@ async function start(param0 = {}) {
         const legacyParams = kwargs;
         legacyParams.withLegacyMockServer = true;
         legacyParams.env = env;
-
         widget = await createWebClient({ serverData, mockRPC, legacyParams });
-
         legacyPatch(widget, {
             destroy() {
                 destroyCallbacks.forEach(callback => callback({ widget }));

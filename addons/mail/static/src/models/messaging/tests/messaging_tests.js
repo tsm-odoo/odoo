@@ -1,6 +1,7 @@
 /** @odoo-module **/
 
 import { afterEach, beforeEach, start } from '@mail/utils/test_utils';
+import { makeFakeNotificationService } from '@web/../tests/helpers/mock_services';
 
 QUnit.module('mail', {}, function () {
 QUnit.module('models', {}, function () {
@@ -28,19 +29,17 @@ QUnit.test('openChat: display notification for partner without user', async func
     this.data['res.partner'].records.push({ id: 14 });
     await this.start({
         services: {
-            notification: {
-                notify(notification) {
+            notification: makeFakeNotificationService(notification => {
                     assert.ok(
                         true,
                         "should display a toast notification after failing to open chat"
                     );
                     assert.strictEqual(
-                        notification.message,
+                        notification,
                         "You can only chat with partners that have a dedicated user.",
                         "should display the correct information in the notification"
                     );
-                },
-            },
+            }),
         },
     });
 
@@ -52,19 +51,17 @@ QUnit.test('openChat: display notification for wrong user', async function (asse
 
     await this.start({
         services: {
-            notification: {
-                notify(notification) {
+            notification: makeFakeNotificationService(notification => {
                     assert.ok(
                         true,
                         "should display a toast notification after failing to open chat"
                     );
                     assert.strictEqual(
-                        notification.message,
+                        notification,
                         "You can only chat with existing users.",
                         "should display the correct information in the notification"
                     );
-                },
-            },
+            }),
         },
     });
 

@@ -30,7 +30,9 @@ registerModel({
                 await this.channel.toggleCall({ startWithVideo: true });
                 await this.threadView.rtcCallViewer.activateFullScreen();
             }
+            this.env.services.bus_service.updateChannels();
         },
+
         /**
          * Creates and displays the welcome view and clears the thread viewer.
          */

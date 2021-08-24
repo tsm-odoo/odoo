@@ -892,7 +892,6 @@ publicWidget.registry.SurveyFormWidget = publicWidget.Widget.extend(SurveyPreloa
     _initSessionManagement: function () {
         if (this.options.surveyToken && this.options.sessionInProgress) {
             this.call('bus_service', 'addChannel', this.options.surveyToken);
-            this.call('bus_service', 'startPolling');
             this.call('bus_service', 'onNotification', this, this._onNotification);
         }
     },

@@ -5,23 +5,22 @@ import { ConnectionLostError } from "@web/core/network/rpc_service";
 import { registry } from "@web/core/registry";
 
 export const calendarNotificationService = {
-    dependencies: ["action", "notification", "rpc"],
+    dependencies: ["action", "notification", "rpc", "bus_service"],
 
-    start(env, { action, notification, rpc }) {
+    start(env, { action, notification, rpc, bus_service }) {
         let calendarNotifTimeouts = {};
         let nextCalendarNotifTimeout = null;
         const displayedNotifications = new Set();
 
         env.bus.on("WEB_CLIENT_READY", null, async () => {
-            const legacyEnv = owl.Component.env;
-            legacyEnv.services.bus_service.onNotification(this, (notifications) => {
+            bus_service.onNotification(this, (notifications) => {
                 for (const { payload, type } of notifications) {
                     if (type === "calendar.alarm") {
                         displayCalendarNotification(payload);
                     }
                 }
             });
-            legacyEnv.services.bus_service.startPolling();
+            bus_service.startBus();
         });
 
         /**

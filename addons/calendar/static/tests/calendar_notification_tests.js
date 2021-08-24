@@ -1,33 +1,52 @@
 /** @odoo-module */
 
-import * as legacyRegistry from "web.Registry";
-import * as BusService from "bus.BusService";
-import * as RamStorage from "web.RamStorage";
-import * as AbstractStorageService from "web.AbstractStorageService";
-
+import { busService } from "@bus/js/services/bus_service";
+import { websocketService } from "@bus/js/services/websocket_service";
 import { createWebClient } from "@web/../tests/webclient/helpers";
 import { calendarNotificationService } from "@calendar/js/services/calendar_notification_service";
 import { click, nextTick, patchWithCleanup } from "@web/../tests/helpers/utils";
 import { browser } from "@web/core/browser/browser";
 import { registry } from "@web/core/registry";
+import { patchWebsocketWithCleanup } from "@web/../tests/helpers/mock_websocket";
 
-const LocalStorageService = AbstractStorageService.extend({
-    storage: new RamStorage(),
-});
 const serviceRegistry = registry.category("services");
 
 QUnit.module("Calendar Notification", (hooks) => {
-    let legacyServicesRegistry;
     hooks.beforeEach(() => {
-        legacyServicesRegistry = new legacyRegistry();
-        legacyServicesRegistry.add("bus_service", BusService);
-        legacyServicesRegistry.add("local_storage", LocalStorageService);
-
+        serviceRegistry.add("websocketService", websocketService);
+        serviceRegistry.add("bus_service", busService);
         serviceRegistry.add("calendarNotification", calendarNotificationService);
 
         patchWithCleanup(browser, {
             setTimeout: (fn) => fn(),
             clearTimeout: () => {},
+        });
+
+        const calendarAlarmNotification = [{
+            message: {
+                type: "calendar.alarm",
+                payload: [{
+                    alarm_id: 1,
+                    event_id: 2,
+                    title: "Meeting",
+                    message: "Very old meeting message",
+                    timer: 20 * 60,
+                    notify_at: "1978-04-14 12:45:00",
+                }],
+            }
+        }];
+
+        // trigger a message event containing the calendar alarm notification
+        // once the websocket bus is started.
+        patchWebsocketWithCleanup({
+            send: function (message) {
+                const { path } = JSON.parse(message);
+                if (path === '/subscribe') {
+                    this.dispatchEvent(new MessageEvent('message', {
+                        data: JSON.stringify(calendarAlarmNotification),
+                    }));
+                }
+            }
         });
     });
 
@@ -36,30 +55,7 @@ QUnit.module("Calendar Notification", (hooks) => {
         async (assert) => {
             assert.expect(5);
 
-            let pollNumber = 0;
             const mockRPC = (route, args) => {
-                if (route === "/longpolling/poll") {
-                    if (pollNumber > 0) {
-                        return new Promise(() => {}); // let it hang to avoid further calls
-                    }
-                    pollNumber++;
-                    return Promise.resolve([
-                        {
-                            id: "prout",
-                            message: {
-                                type: "calendar.alarm",
-                                payload: [{
-                                    alarm_id: 1,
-                                    event_id: 2,
-                                    title: "Meeting",
-                                    message: "Very old meeting message",
-                                    timer: 20 * 60,
-                                    notify_at: "1978-04-14 12:45:00",
-                                }],
-                            },
-                        },
-                    ]);
-                }
                 if (route === "/calendar/notify") {
                     return Promise.resolve([]);
                 }
@@ -69,10 +65,7 @@ QUnit.module("Calendar Notification", (hooks) => {
                 }
             };
 
-            const webClient = await createWebClient({
-                legacyParams: { serviceRegistry: legacyServicesRegistry },
-                mockRPC,
-            });
+            const webClient = await createWebClient({ mockRPC });
 
             await nextTick();
 
@@ -94,30 +87,7 @@ QUnit.module("Calendar Notification", (hooks) => {
         async (assert) => {
             assert.expect(5);
 
-            let pollNumber = 0;
             const mockRPC = (route, args) => {
-                if (route === "/longpolling/poll") {
-                    if (pollNumber > 0) {
-                        return new Promise(() => {}); // let it hang to avoid further calls
-                    }
-                    pollNumber++;
-                    return Promise.resolve([
-                        {
-                            id: "prout",
-                            message: {
-                                type: "calendar.alarm",
-                                payload: [{
-                                    alarm_id: 1,
-                                    event_id: 2,
-                                    title: "Meeting",
-                                    message: "Very old meeting message",
-                                    timer: 20 * 60,
-                                    notify_at: "1978-04-14 12:45:00",
-                                }],
-                            },
-                        },
-                    ]);
-                }
                 if (route === "/calendar/notify") {
                     return Promise.resolve([]);
                 }
@@ -139,10 +109,7 @@ QUnit.module("Calendar Notification", (hooks) => {
             };
             serviceRegistry.add("action", fakeActionService, { force: true });
 
-            const webClient = await createWebClient({
-                legacyParams: { serviceRegistry: legacyServicesRegistry },
-                mockRPC,
-            });
+            const webClient = await createWebClient({ mockRPC });
 
             await nextTick();
 
@@ -164,30 +131,7 @@ QUnit.module("Calendar Notification", (hooks) => {
         async (assert) => {
             assert.expect(4);
 
-            let pollNumber = 0;
             const mockRPC = (route, args) => {
-                if (route === "/longpolling/poll") {
-                    if (pollNumber > 0) {
-                        return new Promise(() => {}); // let it hang to avoid further calls
-                    }
-                    pollNumber++;
-                    return Promise.resolve([
-                        {
-                            message: {
-                                id: "prout",
-                                type: "calendar.alarm",
-                                payload: [{
-                                    alarm_id: 1,
-                                    event_id: 2,
-                                    title: "Meeting",
-                                    message: "Very old meeting message",
-                                    timer: 20 * 60,
-                                    notify_at: "1978-04-14 12:45:00",
-                                }],
-                            },
-                        },
-                    ]);
-                }
                 if (route === "/calendar/notify") {
                     return Promise.resolve([]);
                 }
@@ -197,10 +141,7 @@ QUnit.module("Calendar Notification", (hooks) => {
                 }
             };
 
-            const webClient = await createWebClient({
-                legacyParams: { serviceRegistry: legacyServicesRegistry },
-                mockRPC,
-            });
+            const webClient = await createWebClient({ mockRPC });
 
             await nextTick();
 

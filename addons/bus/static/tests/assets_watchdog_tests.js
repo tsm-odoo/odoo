@@ -1,28 +1,20 @@
 /** @odoo-module */
 
-import * as legacyRegistry from "web.Registry";
-import * as BusService from "bus.BusService";
-import * as RamStorage from "web.RamStorage";
-import * as AbstractStorageService from "web.AbstractStorageService";
-
+import { busService } from '@bus/js/services/bus_service';
+import { websocketService } from '@bus/js/services/websocket_service';
 import { createWebClient } from "@web/../tests/webclient/helpers";
 import { assetsWatchdogService } from "@bus/js/services/assets_watchdog_service";
-import { click, nextTick, patchWithCleanup } from "@web/../tests/helpers/utils";
+import { patchWebsocketWithCleanup } from "@web/../tests/helpers/mock_websocket";
+import { click, patchWithCleanup } from "@web/../tests/helpers/utils";
 import { browser } from "@web/core/browser/browser";
 import { registry } from "@web/core/registry";
 
-const LocalStorageService = AbstractStorageService.extend({
-    storage: new RamStorage(),
-});
 const serviceRegistry = registry.category("services");
 
 QUnit.module("Bus Assets WatchDog", (hooks) => {
-    let legacyServicesRegistry;
     hooks.beforeEach((assert) => {
-        legacyServicesRegistry = new legacyRegistry();
-        legacyServicesRegistry.add("bus_service", BusService);
-        legacyServicesRegistry.add("local_storage", LocalStorageService);
-
+        serviceRegistry.add("websocketService", websocketService);
+        serviceRegistry.add("bus_service", busService);
         serviceRegistry.add("assetsWatchdog", assetsWatchdogService);
 
         patchWithCleanup(browser, {
@@ -37,31 +29,30 @@ QUnit.module("Bus Assets WatchDog", (hooks) => {
     QUnit.test("can listen on bus and displays notifications in DOM", async (assert) => {
         assert.expect(4);
 
-        let pollNumber = 0;
-        const mockRPC = async (route, args) => {
-            if (route === "/longpolling/poll") {
-                if (pollNumber > 0) {
-                    return new Promise(() => {}); // let it hang to avoid further calls
-                }
-                pollNumber++;
-                return [{
-                    message: {
-                        type: 'bundle_changed',
-                        payload: {
-                            name: 'web.assets_backend',
-                            version: 'newHash',
-                        },
-                    },
-                }];
+        const bundleChangedNotification = [{
+            message: {
+                type: 'bundle_changed',
+                payload: {
+                    name: 'web.assets_backend',
+                    version: 'newHash',
+                },
             }
-        };
+        }];
 
-        const webClient = await createWebClient({
-            legacyParams: { serviceRegistry: legacyServicesRegistry },
-            mockRPC,
+        // trigger a message event containing the bundle changed notification
+        // once the websocket bus is started.
+        patchWebsocketWithCleanup({
+            send: function (message) {
+                const { path } = JSON.parse(message);
+                if (path === '/subscribe') {
+                    this.dispatchEvent(new MessageEvent('message', {
+                        data: JSON.stringify(bundleChangedNotification),
+                    }));
+                }
+            },
         });
 
-        await nextTick();
+        const webClient = await createWebClient({});
 
         assert.containsOnce(webClient.el, ".o_notification_body");
         assert.strictEqual(

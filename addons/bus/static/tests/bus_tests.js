@@ -1,122 +1,93 @@
-odoo.define('web.bus_tests', function (require) {
-"use strict";
+/** @odoo-module **/
 
-var BusService = require('bus.BusService');
-var AbstractStorageService = require('web.AbstractStorageService');
-var RamStorage = require('web.RamStorage');
-var testUtils = require('web.test_utils');
-var Widget = require('web.Widget');
-const LegacyRegistry = require("web.Registry");
-const { ConnectionLostError } = require("@web/core/network/rpc_service");
-const { patchWithCleanup, nextTick } = require("@web/../tests/helpers/utils");
-const { createWebClient } =  require('@web/../tests/webclient/helpers');
+import { makeTestEnv } from "@web/../tests/helpers/mock_env";
+import { browser } from "@web/core/browser/browser";
+import { patchWebsocketWithCleanup } from '@web/../tests/helpers/mock_websocket';
+import { nextTick } from '@web/../tests/helpers/utils';
+import { patchWithCleanup } from '@web/../tests/helpers/utils';
+import { registry } from '@web/core/registry';
+import { websocketService } from '@bus/js/services/websocket_service';
+import { busService } from '@bus/js/services/bus_service';
 
+const serviceRegistry = registry.category("services");
 
-var LocalStorageServiceMock;
-
-QUnit.module('Bus', {
-    beforeEach: function () {
-        LocalStorageServiceMock = AbstractStorageService.extend({storage: new RamStorage()});
-    },
-}, function () {
-    QUnit.test('notifications received from the longpolling channel', async function (assert) {
-        assert.expect(6);
-
-        var pollPromise = testUtils.makeTestPromise();
-
-        var parent = new Widget();
-        await testUtils.mock.addMockEnvironment(parent, {
-            data: {},
-            services: {
-                bus_service: BusService,
-                local_storage: LocalStorageServiceMock,
-            },
-            mockRPC: function (route, args) {
-                if (route === '/longpolling/poll') {
-                    assert.step(route + ' - ' + args.channels.join(','));
-
-                    pollPromise = testUtils.makeTestPromise();
-                    pollPromise.abort = (function () {
-                        this.reject({message: "XmlHttpRequestError abort"}, $.Event());
-                    }).bind(pollPromise);
-                    return pollPromise;
-                }
-                return this._super.apply(this, arguments);
-            }
+QUnit.module('Bus', function (hooks) {
+    hooks.beforeEach(() => {
+        patchWithCleanup(browser, {
+            setTimeout: fn => fn(),
         });
-
-        var widget = new Widget(parent);
-        await widget.appendTo($('#qunit-fixture'));
-
-        widget.call('bus_service', 'onNotification', this, function (notifications) {
-            assert.step('notification - ' + notifications.toString());
-        });
-        widget.call('bus_service', 'addChannel', 'lambda');
-
-        pollPromise.resolve([{
-            message: 'beta',
-        }]);
-        await testUtils.nextTick();
-
-        pollPromise.resolve([{
-            message: 'epsilon',
-        }]);
-        await testUtils.nextTick();
-
-        assert.verifySteps([
-            '/longpolling/poll - lambda',
-            'notification - beta',
-            '/longpolling/poll - lambda',
-            'notification - epsilon',
-            '/longpolling/poll - lambda',
-        ]);
-
-        parent.destroy();
+        serviceRegistry.add('websocketService', websocketService);
+        serviceRegistry.add('bus_service', busService);
     });
 
-    QUnit.test('longpolling restarts when connection is lost', async function (assert) {
+    QUnit.test('notifications received from websocket after channel subscription', async function (assert) {
         assert.expect(4);
-        const legacyRegistry = new LegacyRegistry();
-        legacyRegistry.add("bus_service", BusService);
-        legacyRegistry.add("local_storage", LocalStorageServiceMock);
 
-        const oldSetTimeout = window.setTimeout;
-        patchWithCleanup(
-            window,
-            {
-                setTimeout: callback => oldSetTimeout(callback, 0)
-            },
-            { pure: true },
-        )
+        const notifications = [
+            [{
+                message: 'beta',
+            }], [{
+                message: 'epsilon',
+            }]
+        ];
 
-        let busService;
-        let rpcCount = 0;
-        // Using createWebclient to get the compatibility layer between the old services and the new
-        await createWebClient({
-            mockRPC(route) {
-                if (route === '/longpolling/poll') {
-                    rpcCount++;
-                    assert.step(`polling ${rpcCount}`);
-                    if (rpcCount == 1) {
-                        return Promise.reject(new ConnectionLostError());
-                    }
-                    assert.equal(rpcCount, 2, "Should not be called after stopPolling");
-                    busService.stopPolling();
-                    return Promise.reject(new ConnectionLostError());
+        patchWebsocketWithCleanup({
+            send: function (message) {
+                const { path, data } = JSON.parse(message);
+                if (path === '/subscribe') {
+                    assert.step(path + ' - ' + data.channels.join(','));
+                    notifications.forEach(notif => {
+                        this.dispatchEvent(new MessageEvent('message', {
+                            data: JSON.stringify(notif),
+                        }));
+                    });
                 }
             },
-            legacyParams: { serviceRegistry: legacyRegistry },
         });
-        busService = owl.Component.env.services.bus_service;
-        busService.startPolling();
-        // Give longpolling bus a tick to try to restart polling
+
+        const env = await makeTestEnv();
+        env.services.bus_service.onNotification(this, function (notifications) {
+            assert.step('notification - ' + notifications.toString());
+        });
+        env.services.bus_service.addChannel('lambda');
+
         await nextTick();
 
         assert.verifySteps([
-            "polling 1",
-            "polling 2",
+            '/subscribe - lambda',
+            'notification - beta',
+            'notification - epsilon',
         ]);
     });
-});
 
+    QUnit.test('WebSocket reconnects after connection is lost', async function (assert) {
+        assert.expect(4);
+
+        let connectionCount = 0;
+        patchWebsocketWithCleanup({
+            onopen: function () {
+                assert.step(`websocket connected ${connectionCount++}`);
+                if (connectionCount === 1) {
+                    // 1006 means the connection has been closed unexpectedly
+                    // Thus, the bus should try to reconnect.
+                    this.close(1006);
+                } else {
+                    assert.equal(connectionCount, 2, "Should not be called after clean closure");
+                    // 1000 means the connection has been closed cleanly
+                    // Thus, the bus should not try to reconnect.
+                    this.close(1000);
+                }
+            },
+        });
+        const env = await makeTestEnv();
+        env.services.bus_service.startBus();
+
+        // Give websocket a tick to reconnect
+        await nextTick();
+
+        assert.verifySteps([
+            'websocket connected 0',
+            'websocket connected 1',
+        ]);
+    });
 });

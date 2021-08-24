@@ -5,7 +5,6 @@ import { ModelManager } from '@mail/model/model_manager';
 import AbstractService from 'web.AbstractService';
 
 export const MessagingService = AbstractService.extend({
-    dependencies: ['bus_service'],
     messagingValues: {},
     /**
      * @override

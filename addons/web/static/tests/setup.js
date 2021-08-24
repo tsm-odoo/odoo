@@ -10,6 +10,7 @@ import { registerCleanup } from "./helpers/cleanup";
 import { prepareRegistriesWithCleanup } from "./helpers/mock_env";
 import { session as sessionInfo } from "@web/session";
 import { prepareLegacyRegistriesWithCleanup } from "./helpers/legacy_env_utils";
+import { patchWebsocketWithCleanup } from "@web/../tests/helpers/mock_websocket";
 
 const { whenReady, loadFile } = owl.utils;
 
@@ -200,6 +201,7 @@ export async function setupTests() {
         patchLegacyCoreBus();
         patchOdoo();
         patchSessionInfo();
+        patchWebsocketWithCleanup({});
     });
 
     const templatesUrl = `/web/webclient/qweb/${new Date().getTime()}?bundle=web.assets_qweb`;

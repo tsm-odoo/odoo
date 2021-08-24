@@ -4,24 +4,21 @@ import { browser } from "@web/core/browser/browser";
 import { registry } from "@web/core/registry";
 
 export const assetsWatchdogService = {
-    dependencies: ["notification"],
+    dependencies: ["notification", "bus_service"],
 
-    start(env, { notification }) {
+    start(env, { notification, bus_service }) {
         const assets = {};
         let isNotificationDisplayed = false;
         let bundleNotifTimerID = null;
 
         env.bus.on("WEB_CLIENT_READY", null, async () => {
-            const legacyEnv = owl.Component.env;
-
             document.querySelectorAll("*[data-asset-bundle]").forEach((el) => {
                 assets[el.getAttribute("data-asset-bundle")] = el.getAttribute(
                     "data-asset-version"
                 );
             });
-
-            legacyEnv.services.bus_service.onNotification(this, onNotification);
-            legacyEnv.services.bus_service.startPolling();
+            bus_service.onNotification(this, onNotification);
+            bus_service.startBus();
         });
 
         /**
