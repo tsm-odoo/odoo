@@ -13,7 +13,9 @@
             'bus/static/src/**/*',
         ],
         'web.assets_frontend': [
+            'bus/static/src/js/crosstab_bus.js',
             'bus/static/src/js/services/bus_service.js',
+            'bus/static/src/js/websocket_bus.js',
         ],
         'web.qunit_suite_tests': [
             'bus/static/tests/*.js',
