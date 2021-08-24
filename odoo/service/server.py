@@ -127,6 +127,13 @@ class RequestHandler(werkzeug.serving.WSGIRequestHandler):
         me = threading.currentThread()
         me.name = 'odoo.service.http.request.%s' % (me.ident,)
 
+    def send_response(self, code, message=None):
+        # Since the upgrade header is introduced in version 1.1, Firefox won't accept a
+        # websocket connection if the version is set to 1.0.
+        if self.environ.get('REQUEST_URI') == '/websocket':
+            self.protocol_version = "HTTP/1.1"
+        return super().send_response(code, message=message)
+
 
 class ThreadedWSGIServerReloadable(LoggingBaseWSGIServerMixIn, werkzeug.serving.ThreadedWSGIServer):
     """ werkzeug Threaded WSGI Server patched to allow reusing a listen socket
@@ -394,9 +401,9 @@ class ThreadedServer(CommonServer):
             self.limits_reached_threads.add(threading.currentThread())
 
         for thread in threading.enumerate():
-            if not thread.daemon or getattr(thread, 'type', None) == 'cron':
+            if not thread.daemon and getattr(thread, 'type', None) != 'websocket' or getattr(thread, 'type', None) == 'cron':
                 # We apply the limits on cron threads and HTTP requests,
-                # longpolling requests excluded.
+                # longpolling/websocket requests excluded.
                 if getattr(thread, 'start_time', None):
                     thread_execution_time = time.time() - thread.start_time
                     thread_limit_time_real = config['limit_time_real']
@@ -643,6 +650,27 @@ class GeventServer(CommonServer):
             Derived from werzeug.serving.WSGIRequestHandler.log
             / werzeug.serving.WSGIRequestHandler.address_string
             """
+            def get_environ(self):
+                # wsgi_input is given a socket only if the Expect header is present. Since we have
+                # no control over headers with the WebSocket client, this is the best way extract
+                # the socket from the request.
+                # https://github.com/gevent/gevent/blob/4171bc513656d3916b8e4dfe4e8710431ab0d5d0/src/gevent/pywsgi.py#L1151
+                environ = super().get_environ()
+                environ['socket'] = self.socket
+                # Disable support for HTTP chunking on reads which cause an issue when the
+                # connection is being upgraded, see https://github.com/gevent/gevent/issues/1712
+                if self._connection_upgrade_requested():
+                    environ['wsgi.input'] = self.rfile
+                    environ['wsgi.input_terminated'] = False
+                return environ
+
+            def _connection_upgrade_requested(self):
+                if self.headers.get('Connection', '').lower() == 'upgrade':
+                    return True
+                if self.headers.get('Upgrade', '').lower() == 'websocket':
+                    return True
+                return False
+
             def format_request(self):
                 old_address = self.client_address
                 if getattr(self, 'environ', None):
@@ -654,6 +682,26 @@ class GeventServer(CommonServer):
                     return super().format_request()
                 finally:
                     self.client_address = old_address
+
+            def finalize_headers(self):
+                # We need to make gevent.pywsgi stop dealing with chunks when the connection
+                # Is being upgraded. see https://github.com/gevent/gevent/issues/1712
+                super().finalize_headers()
+                if self.code == 101:
+                    # Switching Protocols. Disable chunked writes.
+                    self.response_use_chunked = False
+
+            def handle_one_request(self):
+                # By default, gevent.WSGIHandler.handle method will keep processing
+                # requests until the client closes the connection or sends a Connection Close header.
+                # This, and the fact that WebSocket handles the underlying socket closure leads to
+                # BrokenPipe errors because gevent will try to read on a close socket. In order to
+                # notify gevent that the connection is closed, we just have to return None.
+                # see: https://github.com/gevent/gevent/blob/master/src/gevent/pywsgi.py#L629
+                result = super().handle_one_request()
+                if self.code == 101:
+                    result = None
+                return result
 
         set_limit_memory_hard()
         if os.name == 'posix':

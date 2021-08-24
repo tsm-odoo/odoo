@@ -446,7 +446,7 @@ def route(route=None, **routing):
         fname = f"<function {endpoint.__module__}.{endpoint.__name__}>"
 
         # Sanitize the routing
-        assert 'type' not in routing or routing['type'] in ('http', 'json')
+        assert 'type' not in routing or routing['type'] in ('http', 'json', 'websocket')
         if route:
             routing['routes'] = route if isinstance(route, list) else [route]
         wrong = routing.pop('method', None)
