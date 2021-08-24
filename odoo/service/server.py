@@ -21,6 +21,7 @@ from itertools import chain
 import psutil
 import werkzeug.serving
 from werkzeug.debug import DebuggedApplication
+from contextlib import suppress
 
 if os.name == 'posix':
     # Unix only for workers
@@ -337,6 +338,11 @@ class CommonServer(object):
     def on_stop(self, func):
         """ Register a cleanup function to be executed when the server stops """
         self._on_stop_funcs.append(func)
+
+    def off_stop(self, func):
+        """ Remove cleanup function """
+        with suppress(ValueError):
+            self._on_stop_funcs.remove(func)
 
     def stop(self):
         for func in self._on_stop_funcs:
