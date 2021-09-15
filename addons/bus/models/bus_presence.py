@@ -38,7 +38,7 @@ class BusPresence(models.Model):
         """ Updates the last_poll and last_presence of the current user
             :param inactivity_period: duration in milliseconds
         """
-        # This method is called in method _poll() and cursor is closed right
+        # This method is called in method update_presence() and cursor is closed right
         # after; see bus/controllers/main.py.
         try:
             # Hide transaction serialization errors, which can be ignored, the presence update is not essential
