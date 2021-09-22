@@ -1,12 +1,12 @@
 odoo.define('bus.BusService', function (require) {
 "use strict";
 
-var CrossTab = require('bus.CrossTab');
+var Longpolling = require('bus.Longpolling');
 var core = require('web.core');
 var ServicesMixin = require('web.ServicesMixin');
 const session = require('web.session');
 
-var BusService =  CrossTab.extend(ServicesMixin, {
+var BusService =  Longpolling.extend(ServicesMixin, {
     dependencies : ['local_storage'],
 
     // properties
@@ -66,26 +66,22 @@ var BusService =  CrossTab.extend(ServicesMixin, {
      */
     sendNotification(options, callback) {
         if (window.Notification && Notification.permission === "granted") {
-            if (this.isMasterTab()) {
-                try {
-                    this._sendNativeNotification(options.title, options.message, callback);
-                } catch (error) {
-                    // Notification without Serviceworker in Chrome Android doesn't works anymore
-                    // So we fallback to displayNotification() in this case
-                    // https://bugs.chromium.org/p/chromium/issues/detail?id=481856
-                    if (error.message.indexOf('ServiceWorkerRegistration') > -1) {
-                        this.displayNotification(options);
-                        this._beep();
-                    } else {
-                        throw error;
-                    }
+            try {
+                this._sendNativeNotification(options.title, options.message, callback);
+            } catch (error) {
+                // Notification without Serviceworker in Chrome Android doesn't works anymore
+                // So we fallback to displayNotification() in this case
+                // https://bugs.chromium.org/p/chromium/issues/detail?id=481856
+                if (error.message.indexOf('ServiceWorkerRegistration') > -1) {
+                    this.displayNotification(options);
+                    this._beep();
+                } else {
+                    throw error;
                 }
             }
         } else {
             this.displayNotification(options);
-            if (this.isMasterTab()) {
-                this._beep();
-            }
+            this._beep();
         }
     },
     /**

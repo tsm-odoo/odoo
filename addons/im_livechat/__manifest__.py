@@ -149,8 +149,6 @@ Help your customers with this chat, and analyse their feedback.
             'web/static/src/legacy/js/services/ajax_service.js',
             'web/static/src/legacy/js/services/local_storage_service.js',
             # Bus, Mail, Livechat
-            'bus/static/src/js/longpolling_bus.js',
-            'bus/static/src/js/crosstab_bus.js',
             'bus/static/src/js/services/bus_service.js',
             'mail/static/src/js/utils.js',
             'im_livechat/static/src/legacy/public_livechat.js',

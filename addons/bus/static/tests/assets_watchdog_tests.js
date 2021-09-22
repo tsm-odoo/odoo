@@ -14,7 +14,6 @@ import { registry } from "@web/core/registry";
 const LocalStorageService = AbstractStorageService.extend({
     storage: new RamStorage(),
 });
-const mainComponentRegistry = registry.category("main_components");
 const serviceRegistry = registry.category("services");
 
 QUnit.module("Bus Assets WatchDog", (hooks) => {

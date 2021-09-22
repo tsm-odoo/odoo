@@ -276,10 +276,10 @@ publicWidget.registry.SurveyFormWidget = publicWidget.Widget.extend(SurveyPreloa
 
     // Custom Events
     // -------------------------------------------------------------------------
-    
+
     /**
      * Changes the tooltip according to the type of the field.
-     * @param {Event} event 
+     * @param {Event} event
      */
     _updateEnterButtonText: function (event) {
         const $target = event.target;
@@ -890,20 +890,9 @@ publicWidget.registry.SurveyFormWidget = publicWidget.Widget.extend(SurveyPreloa
      * @private
      */
     _initSessionManagement: function () {
-        var self = this;
         if (this.options.surveyToken && this.options.sessionInProgress) {
             this.call('bus_service', 'addChannel', this.options.surveyToken);
             this.call('bus_service', 'startPolling');
-
-            if (!this._checkIsMasterTab()) {
-                this.shouldReloadMasterTab = true;
-                this.masterTabCheckInterval = setInterval(function() {
-                     if (self._checkIsMasterTab()) {
-                        clearInterval(self.masterTabCheckInterval);
-                     }
-                }, 2000);
-            }
-
             this.call('bus_service', 'onNotification', this, this._onNotification);
         }
     },
@@ -1028,29 +1017,6 @@ publicWidget.registry.SurveyFormWidget = publicWidget.Widget.extend(SurveyPreloa
         if ($firstTextInput.length > 0) {
             $firstTextInput.focus();
         }
-    },
-
-    /**
-    * This method check if the current tab is the master tab at the bus level.
-    * If not, the survey could not receive next question notification anymore from session manager.
-    * We then ask the participant to close all other tabs on the same hostname before letting them continue.
-    *
-    * @private
-    */
-    _checkIsMasterTab: function () {
-        var isMasterTab = this.call('bus_service', 'isMasterTab');
-        var $errorModal = this.$('#MasterTabErrorModal');
-        if (isMasterTab) {
-            // Force reload the page when survey is ready to be followed, to force restart long polling
-            if (this.shouldReloadMasterTab) {
-                window.location.reload();
-            }
-           return true;
-        } else if (!$errorModal.modal._isShown){
-            $errorModal.find('.text-danger').text(window.location.hostname);
-            $errorModal.modal('show');
-        }
-        return false;
     },
 
     // CONDITIONAL QUESTIONS MANAGEMENT TOOLS
