@@ -322,7 +322,6 @@ const Wysiwyg = Widget.extend({
             }
         });
         this.call('bus_service', 'addChannel', this._collaborationChannelName);
-        this.call('bus_service', 'startPolling');
 
         // Wether or not the history has been sent or received at least once.
         let historySyncAtLeastOnce = false;

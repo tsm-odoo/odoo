@@ -1,7 +1,7 @@
 odoo.define('im_livechat.legacy.im_livechat.im_livechat', function (require) {
 "use strict";
 
-require('bus.BusService');
+require('@bus/js/services/bus_service');
 var concurrency = require('web.concurrency');
 var config = require('web.config');
 var core = require('web.core');
@@ -283,7 +283,6 @@ var LivechatButton = Widget.extend({
                     }
                     self._renderMessages();
                     self.call('bus_service', 'addChannel', self._livechat.getUUID());
-                    self.call('bus_service', 'startPolling');
 
                     utils.set_cookie('im_livechat_session', utils.unaccent(JSON.stringify(self._livechat.toData()), true), 60 * 60);
                     utils.set_cookie('im_livechat_auto_popup', JSON.stringify(false), 60 * 60);

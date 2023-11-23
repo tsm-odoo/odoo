@@ -2,9 +2,9 @@
 # Part of Odoo. See LICENSE file for full copyright and licensing details.
 
 from odoo import SUPERUSER_ID, tools
-from odoo.http import request, route
 from odoo.addons.bus.controllers.main import BusController
-
+from odoo.http import request, route
+from odoo.websocket import ws_request
 
 class MailChatController(BusController):
 
@@ -16,24 +16,22 @@ class MailChatController(BusController):
         return request.session.uid and request.session.uid or SUPERUSER_ID
 
     # --------------------------
-    # Extends BUS Controller Poll
+    # Extends BUS Controller Subscribe
     # --------------------------
-    def _poll(self, dbname, channels, last, options):
+    def _subscribe(self, channels, last):
         channels = list(channels)  # do not alter original list
-        guest_sudo = request.env['mail.guest']._get_guest_from_request(request).sudo()
-        mail_channels = request.env['mail.channel']
-        if request.session.uid:
-            partner = request.env.user.partner_id
+        guest_sudo = ws_request.env['mail.guest']._get_guest_from_request(ws_request).sudo()
+        mail_channels = ws_request.env['mail.channel']
+        if ws_request.session.uid:
+            partner = ws_request.env.user.partner_id
             mail_channels = partner.channel_ids
             channels.append(partner)
         elif guest_sudo:
-            if 'bus_inactivity' in options:
-                guest_sudo.env['bus.presence'].update(inactivity_period=options.get('bus_inactivity'), identity_field='guest_id', identity_value=guest_sudo.id)
             mail_channels = guest_sudo.channel_ids
             channels.append(guest_sudo)
         for mail_channel in mail_channels:
             channels.append(mail_channel)
-        return super()._poll(dbname, channels, last, options)
+        return super()._subscribe(channels, last)
 
     # --------------------------
     # Anonymous routes (Common Methods)

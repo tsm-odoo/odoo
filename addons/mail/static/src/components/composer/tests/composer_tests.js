@@ -16,6 +16,7 @@ import {
     file,
     makeTestPromise,
 } from 'web.test_utils';
+import { makeFakeNotificationService } from '@web/../tests/helpers/mock_services';
 
 const { createFile, inputFiles } = file;
 

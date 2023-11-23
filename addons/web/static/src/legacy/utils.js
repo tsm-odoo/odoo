@@ -232,7 +232,6 @@ export function makeLegacyNotificationService(legacyEnv) {
                         onClick: button.click,
                     };
                 });
-
                 const removeFn = env.services.notification.add(_.escape(message), {
                     sticky,
                     title,

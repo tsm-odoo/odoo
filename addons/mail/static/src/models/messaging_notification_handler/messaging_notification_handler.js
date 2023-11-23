@@ -16,7 +16,6 @@ registerModel({
         _willDelete() {
             if (this.env.services['bus_service']) {
                 this.env.services['bus_service'].off('notification');
-                this.env.services['bus_service'].stopPolling();
             }
         },
     },
@@ -27,8 +26,13 @@ registerModel({
          */
         start() {
             this.env.services.bus_service.onNotification(null, notifs => this._handleNotifications(notifs));
-            this.env.services.bus_service.startPolling();
+            this.env.services.bus_service.startBus();
         },
+
+        //----------------------------------------------------------------------
+        // Private
+        //----------------------------------------------------------------------
+
         /**
          * @private
          * @param {Object[]} notifications
@@ -98,6 +102,7 @@ registerModel({
                         case 'mail.channel/last_interest_dt_changed':
                             return this._handleNotificationChannelLastInterestDateTimeChanged(message.payload);
                         case 'mail.channel/legacy_insert':
+                            this.env.services.bus_service.updateChannels();
                             return this.messaging.models['Thread'].insert(this.messaging.models['Thread'].convertData({ model: 'mail.channel', ...message.payload }));
                         case 'mail.channel/insert':
                             return this._handleNotificationChannelUpdate(message.payload);
@@ -185,6 +190,7 @@ registerModel({
          * @param {integer} payload.invited_by_user_id
          */
         _handleNotificationChannelJoined({ channel: channelData, invited_by_user_id: invitedByUserId }) {
+            this.env.services.bus_service.updateChannels();
             const channel = this.messaging.models['Thread'].insert(this.messaging.models['Thread'].convertData(channelData));
             if (invitedByUserId !== this.messaging.currentUser.id) {
                 // Current user was invited by someone else.
@@ -610,6 +616,7 @@ registerModel({
             if (!channel) {
                 return;
             }
+            this.env.services.bus_service.updateChannels();
             const message = _.str.sprintf(this.env._t("You unsubscribed from %s."), channel.displayName);
             this.env.services['notification'].notify({ message, type: 'info' });
             // We assume that arriving here the server has effectively
